@@ -2,9 +2,9 @@ defmodule Vexil do
   @moduledoc """
   Documentation for `Vexil`.
   """
-  alias Vexil.{Errors, Parsers, Structs}
+  alias Vexil.{Errors, Parsers, Structs, Utils}
 
-  @type argv() :: list(String.t())
+  @type argv() :: Utils.argv()
   @type flags() :: list({atom(), Structs.Flags.t()})
   @type options() :: list({atom(), Structs.Options.t()})
 
@@ -57,7 +57,7 @@ defmodule Vexil do
 
     with :ok <- validate_argv(argv),
          :ok <- validate_opts(opt_flags, opt_options),
-         {argv, argv_remainder} <- split_double_dash(argv, double_dash),
+         {argv, argv_remainder} <- Utils.split_double_dash(argv, double_dash),
          {:ok, options, option_errors, argv} <- find_options(argv, opt_options, error_early),
          {:ok, flags, flag_errors, argv} <- find_flags(argv, opt_flags, error_early) do
       {
@@ -71,9 +71,18 @@ defmodule Vexil do
   @spec parse!(argv(), parse_spec()) :: any()
   def parse!(argv, opts \\ []) do
     case Vexil.parse(argv, opts) do
-      {:ok, result} -> result
-      # TODO: better differentiation if its an input error or what
-      {:error, _} -> raise Errors.ParseError
+      {:ok, result, {[], []}} ->
+        result
+
+      # TODO: MultiError?
+      {:ok, _, {[err | _], _}} ->
+        Utils.bangify_parse_error(err)
+
+      {:ok, _, {_, [err | _]}} ->
+        Utils.bangify_parse_error(err)
+
+      err ->
+        Utils.bangify_parse_error(err)
     end
   end
 
@@ -108,17 +117,6 @@ defmodule Vexil do
       bad_option != nil -> {:error, :invalid_option, bad_option}
       conflicts != [] -> {:error, :conflicting_key, List.first(conflicts)}
       true -> :ok
-    end
-  end
-
-  @spec split_double_dash(argv(), boolean()) :: {argv(), argv()}
-  defp split_double_dash(argv, obey) do
-    if obey do
-      {argv, remainder} = Enum.split_while(argv, fn x -> x !== "--" end)
-      # Slice remainder to remove leading --
-      {argv, Enum.slice(remainder, 1..-1)}
-    else
-      {argv, []}
     end
   end
 
