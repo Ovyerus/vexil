@@ -10,6 +10,10 @@ defmodule Vexil do
 
   @type found() :: list({:ok | :error, atom(), any()})
 
+  @type validate_argv_error() :: {:error, :invalid_argv}
+  @type validate_opts_error() ::
+          {:error, :invalid_flag | :invalid_option | :conflicting_key, atom()}
+
   @type parse_spec_item() ::
           {:flags, flags()}
           | {:options, options()}
@@ -19,6 +23,8 @@ defmodule Vexil do
   @type parsed_items() :: %{:flags => parsed_flags(), :options => parsed_options(), argv: argv()}
   @type parse_result() ::
           {:ok, parsed_items(), {list(find_options_error()), list(find_flags_error())}}
+          | validate_opts_error()
+          | validate_argv_error()
           | find_options_error()
           | find_flags_error()
 
@@ -49,8 +55,8 @@ defmodule Vexil do
     opt_flags = Keyword.get(opts, :flags, [])
     opt_options = Keyword.get(opts, :options, [])
 
-    # TODO: validation of args to make sure we don't have things like conflicting names in both options and flags
     with :ok <- validate_argv(argv),
+         :ok <- validate_opts(opt_flags, opt_options),
          {argv, argv_remainder} <- split_double_dash(argv, double_dash),
          {:ok, options, option_errors, argv} <- find_options(argv, opt_options, error_early),
          {:ok, flags, flag_errors, argv} <- find_flags(argv, opt_flags, error_early) do
@@ -71,12 +77,37 @@ defmodule Vexil do
     end
   end
 
-  @spec validate_argv(argv()) :: :ok | {:error, String.t()}
+  @spec validate_argv(argv()) :: :ok | validate_argv_error()
   defp validate_argv(argv) when is_list(argv) do
     if Enum.all?(argv, &is_binary/1) do
       :ok
     else
       {:error, :invalid_argv}
+    end
+  end
+
+  @spec validate_opts(flags(), options()) :: :ok | validate_opts_error()
+  defp validate_opts(flags, options) do
+    {bad_flag, _} =
+      Enum.find(flags, {nil, nil}, fn {_, struct} -> !match?(%Structs.Flag{}, struct) end)
+
+    {bad_option, _} =
+      Enum.find(options, {nil, nil}, fn {_, struct} -> !match?(%Structs.Option{}, struct) end)
+
+    flag_keys = Enum.map(flags, fn {key, _} -> key end)
+    option_keys = Enum.map(options, fn {key, _} -> key end)
+    # TODO: a way to do this without concat? (use a reduce with them in a tuple)
+    conflicts =
+      (flag_keys ++ option_keys)
+      |> Enum.frequencies()
+      |> Enum.filter(fn {_, v} -> v != 1 end)
+      |> Enum.map(fn {k, _} -> k end)
+
+    cond do
+      bad_flag != nil -> {:error, :invalid_flag, bad_flag}
+      bad_option != nil -> {:error, :invalid_option, bad_option}
+      conflicts != [] -> {:error, :conflicting_key, List.first(conflicts)}
+      true -> :ok
     end
   end
 
