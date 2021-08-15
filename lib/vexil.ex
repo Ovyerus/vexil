@@ -162,7 +162,7 @@ defmodule Vexil do
         true ->
           {value, tail} =
             if option.greedy and option.parser not in @ungreedy_parsers do
-              consume_argv_greedy(tail)
+              Utils.consume_argv_greedy(tail)
             else
               [head | tail] = tail
               {head, tail}
@@ -233,11 +233,11 @@ defmodule Vexil do
         end
 
       ["--" <> long | tail] ->
-        {long, tail} = split_eq(long, tail)
+        {long, tail} = Utils.split_eq(long, tail)
         consume_option.(long, tail, :long)
 
       ["-" <> short | tail] ->
-        {short, tail} = split_eq(short, tail)
+        {short, tail} = Utils.split_eq(short, tail)
         consume_option.(short, tail, :short)
 
       [head | tail] ->
@@ -336,26 +336,6 @@ defmodule Vexil do
 
       [head | tail] ->
         find_flags(tail, wanted_flags, seen_flags, [head | remainder])
-    end
-  end
-
-  @spec split_eq(String.t(), argv()) :: {String.t(), argv()}
-  defp split_eq(str, tail) do
-    if String.contains?(str, "=") do
-      [option, value] = String.split(str, "=", parts: 2)
-      {option, [value | tail]}
-    else
-      {str, tail}
-    end
-  end
-
-  @spec consume_argv_greedy(argv(), argv()) :: {argv(), argv()}
-  defp consume_argv_greedy(argv, acc \\ []) do
-    case argv do
-      [] -> {Enum.reverse(acc), argv}
-      # Stop on next option starting with a dash because it could be an option
-      ["-" <> _ | _] -> {Enum.reverse(acc), argv}
-      [head | tail] -> consume_argv_greedy(tail, [head | acc])
     end
   end
 end

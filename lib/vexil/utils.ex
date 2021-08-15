@@ -65,4 +65,24 @@ defmodule Vexil.Utils do
         raise Errors.DuplicateFlagError, key: key, message: "duplicate flag '#{key}'"
     end
   end
+
+  @spec consume_argv_greedy(argv(), argv()) :: {argv(), argv()}
+  def consume_argv_greedy(argv, acc \\ []) do
+    case argv do
+      [] -> {Enum.reverse(acc), argv}
+      # Stop on next option starting with a dash because it could be an option
+      ["-" <> _ | _] -> {Enum.reverse(acc), argv}
+      [head | tail] -> consume_argv_greedy(tail, [head | acc])
+    end
+  end
+
+  @spec split_eq(String.t(), argv()) :: {String.t(), argv()}
+  def split_eq(str, tail) do
+    if String.contains?(str, "=") do
+      [option, value] = String.split(str, "=", parts: 2)
+      {option, [value | tail]}
+    else
+      {str, tail}
+    end
+  end
 end
