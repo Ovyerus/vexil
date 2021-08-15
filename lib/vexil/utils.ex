@@ -5,7 +5,7 @@ defmodule Vexil.Utils do
   @type argv() :: list(String.t())
 
   @spec split_double_dash(argv(), boolean()) :: {argv(), argv()}
-  def split_double_dash(argv, obey) do
+  def split_double_dash(argv, obey \\ true) do
     if obey do
       {argv, remainder} = Enum.split_while(argv, fn x -> x !== "--" end)
       # Slice remainder to remove leading --
