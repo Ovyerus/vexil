@@ -2,7 +2,7 @@ defmodule Vexil do
   @moduledoc """
   Documentation for `Vexil`.
   """
-  alias Vexil.{Errors, Parsers, Structs, Utils}
+  alias Vexil.{Parsers, Structs, Utils}
 
   @type argv() :: Utils.argv()
   @type flags() :: list({atom(), Structs.Flags.t()})
@@ -58,8 +58,9 @@ defmodule Vexil do
     with :ok <- validate_argv(argv),
          :ok <- validate_opts(opt_flags, opt_options),
          {argv, argv_remainder} <- Utils.split_double_dash(argv, double_dash),
-         {:ok, options, option_errors, argv} <- find_options(argv, opt_options, error_early),
-         {:ok, flags, flag_errors, argv} <- find_flags(argv, opt_flags, error_early) do
+         {:ok, options, option_errors, argv} <-
+           find_options(argv, opt_options, opt_flags, error_early),
+         {:ok, flags, flag_errors, argv} <- find_flags(argv, opt_flags, opt_options, error_early) do
       {
         :ok,
         %{flags: flags, options: options, argv: argv ++ argv_remainder},
@@ -120,20 +121,36 @@ defmodule Vexil do
     end
   end
 
-  @spec find_options(argv(), options(), boolean(), found(), argv()) ::
+  @spec find_options(argv(), options(), flags(), boolean(), found(), argv()) ::
           find_options_result()
-  defp find_options(argv, wanted_options, error_early, seen_options \\ [], remainder \\ []) do
+  defp find_options(
+         argv,
+         wanted_options,
+         wanted_flags,
+         error_early,
+         seen_options \\ [],
+         remainder \\ []
+       ) do
     consume_option = fn lookup_name, tail, comparison_key ->
-      # TODO: need to lookup `flags` as well to make sure we don't error with an `unknown option` despite it existing as a flag
-      option = Enum.find(wanted_options, fn {_, opt} -> opt[comparison_key] == lookup_name end)
+      {name, option} =
+        Enum.find(wanted_options, {nil, nil}, fn {_, opt} ->
+          opt[comparison_key] == lookup_name
+        end)
 
-      {name, option} = option || {nil, nil}
+      is_flag = Enum.find(wanted_flags, fn {_, flag} -> flag[comparison_key] == lookup_name end)
 
       cond do
+        # Ignore anything that is listed as a flag so that we don't error right after for unknown option
+        is_flag ->
+          find_options(tail, wanted_options, seen_options, [lookup_name | remainder])
+
         !option ->
+          err = {:error, :unknown_option, lookup_name}
+
           if error_early,
-            do: {:error, :unknown_option, lookup_name},
-            else: find_options(tail, wanted_options, seen_options, [lookup_name | remainder])
+            do: err,
+            else:
+              find_options(tail, wanted_options, [err | seen_options], [lookup_name | remainder])
 
         not option.multiple && seen_options[name] ->
           err = {:error, :duplicate_option, name}
@@ -228,16 +245,35 @@ defmodule Vexil do
     end
   end
 
-  @spec find_flags(argv(), flags(), boolean(), found(), argv()) :: find_flags_result()
-  defp find_flags(argv, wanted_flags, error_early, seen_flags \\ [], remainder \\ []) do
+  @spec find_flags(argv(), flags(), options(), boolean(), found(), argv()) :: find_flags_result()
+  defp find_flags(
+         argv,
+         wanted_flags,
+         wanted_options,
+         error_early,
+         seen_flags \\ [],
+         remainder \\ []
+       ) do
     consume_flag = fn lookups, tail, comparison_key ->
       results =
         for lookup_name <- lookups do
-          flag = Enum.find(wanted_flags, fn {_, opt} -> opt[comparison_key] == lookup_name end)
+          {name, flag} =
+            Enum.find(wanted_flags, {nil, nil}, fn {_, opt} ->
+              opt[comparison_key] == lookup_name
+            end)
 
-          {name, flag} = flag || {nil, nil}
+          is_option =
+            Enum.find(wanted_options, fn {_, flag} -> flag[comparison_key] == lookup_name end)
 
           cond do
+            # TODO: do we add prefix? Also this probably doesn't actually need
+            # to be checked since options get consumed prior to flags (we also
+            # need to special case grouped flags in options parsing but I'm too
+            # lazy to do so right now oopsie)
+            is_option ->
+              prefix = if comparison_key == :long, do: "--", else: "-"
+              {:remainder, prefix <> lookup_name}
+
             !flag ->
               {:error, :unknown_flag, lookup_name}
 
@@ -250,10 +286,23 @@ defmodule Vexil do
         end
 
       first_error = Enum.find(results, &match?({:error, _, _}, &1))
+      results_no_remainders = Enum.filter(results, &match?({:ok, _, _}, &1))
+
+      remainders =
+        results
+        |> Enum.filter(&match?({:remainder, _}, &1))
+        |> Enum.map(&elem(&1, 1))
+        |> Enum.reverse()
 
       if error_early and first_error,
         do: first_error,
-        else: find_flags(tail, wanted_flags, results ++ seen_flags, remainder)
+        else:
+          find_flags(
+            tail,
+            wanted_flags,
+            results_no_remainders ++ seen_flags,
+            remainders ++ remainder
+          )
     end
 
     case argv do
