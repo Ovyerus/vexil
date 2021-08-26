@@ -104,6 +104,9 @@ defmodule Vexil do
     {bad_option, _} =
       Enum.find(options, {nil, nil}, fn {_, struct} -> !match?(%Structs.Option{}, struct) end)
 
+    # TODO: make sure that `default` can't be used on a required option
+    # Maybe also pre-validate parsers??
+
     flag_keys = Enum.map(flags, fn {key, _} -> key end)
     option_keys = Enum.map(options, fn {key, _} -> key end)
     # TODO: a way to do this without concat? (use a reduce with them in a tuple)
@@ -134,30 +137,68 @@ defmodule Vexil do
     consume_option = fn lookup_name, tail, comparison_key ->
       {name, option} =
         Enum.find(wanted_options, {nil, nil}, fn {_, opt} ->
-          opt[comparison_key] == lookup_name
+          case comparison_key do
+            :long -> opt.long == lookup_name
+            :short -> opt.short == lookup_name
+          end
         end)
 
-      is_flag = Enum.find(wanted_flags, fn {_, flag} -> flag[comparison_key] == lookup_name end)
+      is_flag =
+        Enum.find(wanted_flags, fn {_, flag} ->
+          case comparison_key do
+            :long -> flag.long == lookup_name
+            :short -> flag.short == lookup_name
+          end
+        end)
 
       cond do
         # Ignore anything that is listed as a flag so that we don't error right after for unknown option
         is_flag ->
-          find_options(tail, wanted_options, seen_options, [lookup_name | remainder])
+          fixed_name =
+            case comparison_key do
+              :long -> "--" <> lookup_name
+              :short -> "-" <> lookup_name
+            end
+
+          find_options(tail, wanted_options, wanted_flags, error_early, seen_options, [
+            fixed_name | remainder
+          ])
 
         !option ->
           err = {:error, :unknown_option, lookup_name}
 
+          fixed_name =
+            case comparison_key do
+              :long -> "--" <> lookup_name
+              :short -> "-" <> lookup_name
+            end
+
           if error_early,
             do: err,
             else:
-              find_options(tail, wanted_options, [err | seen_options], [lookup_name | remainder])
+              find_options(
+                tail,
+                wanted_options,
+                wanted_flags,
+                error_early,
+                [err | seen_options],
+                [fixed_name | remainder]
+              )
 
         not option.multiple && seen_options[name] ->
           err = {:error, :duplicate_option, name}
 
           if error_early,
             do: err,
-            else: find_options(tail, wanted_options, [err | seen_options], remainder)
+            else:
+              find_options(
+                tail,
+                wanted_options,
+                wanted_flags,
+                error_early,
+                [err | seen_options],
+                remainder
+              )
 
         true ->
           {value, tail} =
@@ -190,7 +231,15 @@ defmodule Vexil do
 
           if success == :error and error_early,
             do: result,
-            else: find_options(tail, wanted_options, [result | seen_options], remainder)
+            else:
+              find_options(
+                tail,
+                wanted_options,
+                wanted_flags,
+                error_early,
+                [result | seen_options],
+                remainder
+              )
       end
     end
 
@@ -212,6 +261,7 @@ defmodule Vexil do
           end)
 
         # TODO: merge `multiple` options into the same list item which is `{:ok, list(blah blah)}`
+        # TODO: apply defaults when provided (default to nil if not provided?)
 
         missing =
           wanted_options
@@ -221,7 +271,7 @@ defmodule Vexil do
         missing = if missing != [], do: {:error, :missing_required_options, missing}, else: nil
         all_errors = if missing, do: [missing | all_errors], else: all_errors
 
-        if error_early and missing do
+        if error_early && missing do
           missing
         else
           {
@@ -236,12 +286,20 @@ defmodule Vexil do
         {long, tail} = Utils.split_eq(long, tail)
         consume_option.(long, tail, :long)
 
-      ["-" <> short | tail] ->
-        {short, tail} = Utils.split_eq(short, tail)
-        consume_option.(short, tail, :short)
+      ["-" <> short = original | tail] ->
+        if String.length(short) > 1 do
+          find_options(tail, wanted_options, wanted_flags, error_early, seen_options, [
+            original | remainder
+          ])
+        else
+          {short, tail} = Utils.split_eq(short, tail)
+          consume_option.(short, tail, :short)
+        end
 
       [head | tail] ->
-        find_options(tail, wanted_options, seen_options, [head | remainder])
+        find_options(tail, wanted_options, wanted_flags, error_early, seen_options, [
+          head | remainder
+        ])
     end
   end
 
@@ -258,12 +316,20 @@ defmodule Vexil do
       results =
         for lookup_name <- lookups do
           {name, flag} =
-            Enum.find(wanted_flags, {nil, nil}, fn {_, opt} ->
-              opt[comparison_key] == lookup_name
+            Enum.find(wanted_flags, {nil, nil}, fn {_, flag} ->
+              case comparison_key do
+                :long -> flag.long == lookup_name
+                :short -> flag.short == lookup_name
+              end
             end)
 
           is_option =
-            Enum.find(wanted_options, fn {_, flag} -> flag[comparison_key] == lookup_name end)
+            Enum.find(wanted_options, fn {_, opt} ->
+              case comparison_key do
+                :long -> opt.long == lookup_name
+                :short -> opt.short == lookup_name
+              end
+            end)
 
           cond do
             # TODO: do we add prefix? Also this probably doesn't actually need
@@ -285,8 +351,10 @@ defmodule Vexil do
           end
         end
 
-      first_error = Enum.find(results, &match?({:error, _, _}, &1))
-      results_no_remainders = Enum.filter(results, &match?({:ok, _, _}, &1))
+      first_error = results |> Enum.reverse() |> Enum.find(&match?({:error, _, _}, &1))
+      results_no_remainders = Enum.filter(results, fn x -> !match?({:remainder, _, _}, x) end)
+
+      # TODO: make not given flags show up as false in the result
 
       remainders =
         results
@@ -300,6 +368,8 @@ defmodule Vexil do
           find_flags(
             tail,
             wanted_flags,
+            wanted_options,
+            error_early,
             results_no_remainders ++ seen_flags,
             remainders ++ remainder
           )
@@ -311,15 +381,23 @@ defmodule Vexil do
           seen_flags
           |> Enum.filter(&match?({:ok, _, _}, &1))
           # Get amount of times each name occurs (used for multiple flags like verbosity)
-          |> Enum.frequencies_by(&elem(&1, 1))
+          # Doing this manually instead of Enum.frequencies so that we maintain the order,
+          # as Enum.frequencies puts it into a map which is sorted alphabeticallyQ
+          |> Enum.reduce([], fn {_, key, _}, acc ->
+            Keyword.put(
+              acc,
+              key,
+              case acc[key] do
+                nil -> 1
+                i -> i + 1
+              end
+            )
+          end)
           |> Enum.map(fn
-            {key, 1} ->
-              if wanted_flags[key].multiple,
-                do: {key, 1},
-                else: {key, true}
-
-            x ->
-              x
+            {name, count} ->
+              if wanted_flags[name].multiple,
+                do: {name, count},
+                else: {name, true}
           end)
 
         all_errors = seen_flags |> Enum.filter(&match?({:error, _type, _arg0}, &1)) |> Enum.uniq()
@@ -331,11 +409,14 @@ defmodule Vexil do
 
       ["-" <> short | tail] ->
         # Allow grouping short flags together like `-abcdeeee`
-        flags = if String.length(short) > 1, do: String.split(short), else: [short]
+        flags =
+          if(String.length(short) > 1, do: String.graphemes(short), else: [short])
+          |> Enum.reverse()
+
         consume_flag.(flags, tail, :short)
 
       [head | tail] ->
-        find_flags(tail, wanted_flags, seen_flags, [head | remainder])
+        find_flags(tail, wanted_flags, wanted_options, error_early, seen_flags, [head | remainder])
     end
   end
 end
