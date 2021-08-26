@@ -69,7 +69,7 @@ defmodule UtilsTest do
       assert split_eq("foo=bar=faz=bax", ["baz"]) == {"foo", ["bar=faz=bax", "baz"]}
     end
 
-    test "does't do splitting when no equals" do
+    test "doesn't do splitting when no equals" do
       assert split_eq("foo bar", []) == {"foo bar", []}
       assert split_eq("foo bar", ["faz", "baz"]) == {"foo bar", ["faz", "baz"]}
     end
