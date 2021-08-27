@@ -169,43 +169,41 @@ defmodule VexilTest do
         long: "bar"
       }
 
-      flags = [foo: foo, bar: bar]
+      one = [foo: foo]
+      two = [foo: foo, bar: bar]
 
-      assert Vexil.parse(["-f"], flags: flags) ==
+      assert Vexil.parse(["-f"], flags: one) ==
                {:ok, %{argv: [], flags: [foo: 1], options: []}, {[], []}}
 
-      assert Vexil.parse(["-f", "-f"], flags: flags) ==
+      assert Vexil.parse(["-f", "-f"], flags: one) ==
                {:ok, %{argv: [], flags: [foo: 2], options: []}, {[], []}}
 
-      assert Vexil.parse(["-f", "-f", "-f"], flags: flags) ==
+      assert Vexil.parse(["-f", "-f", "-f"], flags: one) ==
                {:ok, %{argv: [], flags: [foo: 3], options: []}, {[], []}}
 
-      assert Vexil.parse(["-ff"], flags: flags) ==
+      assert Vexil.parse(["-ff"], flags: one) ==
                {:ok, %{argv: [], flags: [foo: 2], options: []}, {[], []}}
 
-      assert Vexil.parse(["-fff"], flags: flags) ==
+      assert Vexil.parse(["-fff"], flags: one) ==
                {:ok, %{argv: [], flags: [foo: 3], options: []}, {[], []}}
 
-      assert Vexil.parse(["-ff", "-f"], flags: flags) ==
+      assert Vexil.parse(["-ff", "-f"], flags: one) ==
                {:ok, %{argv: [], flags: [foo: 3], options: []}, {[], []}}
 
-      assert Vexil.parse(["-f", "-b"], flags: flags) ==
+      assert Vexil.parse(["-f", "-b"], flags: two) ==
                {:ok, %{argv: [], flags: [foo: 1, bar: true], options: []}, {[], []}}
 
-      assert Vexil.parse(["-f", "-b", "-f"], flags: flags) ==
+      assert Vexil.parse(["-f", "-b", "-f"], flags: two) ==
                {:ok, %{argv: [], flags: [foo: 2, bar: true], options: []}, {[], []}}
 
-      assert Vexil.parse(["-ffb"], flags: flags) ==
+      assert Vexil.parse(["-ffb"], flags: two) ==
                {:ok, %{argv: [], flags: [foo: 2, bar: true], options: []}, {[], []}}
 
-      assert Vexil.parse(["-fbf"], flags: flags) ==
+      assert Vexil.parse(["-fbf"], flags: two) ==
                {:ok, %{argv: [], flags: [foo: 2, bar: true], options: []}, {[], []}}
 
-      assert Vexil.parse(["-bf"], flags: flags) ==
+      assert Vexil.parse(["-bf"], flags: two) ==
                {:ok, %{argv: [], flags: [bar: true, foo: 1], options: []}, {[], []}}
-
-      # TODO: test for error when providing multiple flags when its not
-      # specified as multiple
     end
 
     test "has an error in the relevant list when seeing an unknown flag" do

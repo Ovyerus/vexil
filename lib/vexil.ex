@@ -354,8 +354,6 @@ defmodule Vexil do
       first_error = results |> Enum.reverse() |> Enum.find(&match?({:error, _, _}, &1))
       results_no_remainders = Enum.filter(results, fn x -> !match?({:remainder, _, _}, x) end)
 
-      # TODO: make not given flags show up as false in the result
-
       remainders =
         results
         |> Enum.filter(&match?({:remainder, _}, &1))
@@ -400,9 +398,14 @@ defmodule Vexil do
                 else: {name, true}
           end)
 
+        unprovided_flags =
+          wanted_flags
+          |> Enum.filter(fn {name, _} -> found_flags[name] == nil end)
+          |> Enum.map(fn {name, _} -> {name, false} end)
+
         all_errors = seen_flags |> Enum.filter(&match?({:error, _type, _arg0}, &1)) |> Enum.uniq()
 
-        {:ok, found_flags, all_errors, Enum.reverse(remainder)}
+        {:ok, found_flags ++ unprovided_flags, all_errors, Enum.reverse(remainder)}
 
       ["--" <> long | tail] ->
         consume_flag.([long], tail, :long)
