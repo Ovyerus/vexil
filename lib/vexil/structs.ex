@@ -13,9 +13,10 @@ defmodule Vexil.Structs do
     field :long, String.t(), enforce: true
     field :parser, Vexil.Parsers.custom() | Vexil.Parsers.builtins(), default: :string
     field :required, bool(), default: false
+    # TODO: implement greedy up until a certain amount
     field :greedy, bool() | pos_integer(), default: false
     field :multiple, bool(), default: false
-    field :default, any()
+    field :default, any(), default: nil
   end
 
   typedstruct module: Flag do

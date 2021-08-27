@@ -2,6 +2,7 @@ defmodule Vexil do
   @moduledoc """
   Documentation for `Vexil`.
   """
+  require Vexil.Parsers
   alias Vexil.{Parsers, Structs, Utils}
 
   @type argv() :: Utils.argv()
@@ -104,23 +105,49 @@ defmodule Vexil do
     {bad_option, _} =
       Enum.find(options, {nil, nil}, fn {_, struct} -> !match?(%Structs.Option{}, struct) end)
 
-    # TODO: make sure that `default` can't be used on a required option
-    # Maybe also pre-validate parsers??
+    {required_option_has_default, _} =
+      Enum.find(options, {nil, nil}, fn {_, struct} ->
+        struct.required && struct.default != nil
+      end)
 
-    flag_keys = Enum.map(flags, fn {key, _} -> key end)
-    option_keys = Enum.map(options, fn {key, _} -> key end)
-    # TODO: a way to do this without concat? (use a reduce with them in a tuple)
+    {invalid_parser, _} =
+      Enum.find(options, {nil, nil}, fn {_, struct} ->
+        struct.parser not in Parsers.all() and not is_function(struct.parser)
+      end)
+
+    flag_names =
+      Enum.map(flags, fn {_, flag} -> {flag.short, flag.long} end)
+      |> Enum.reduce([], fn {short, long}, acc -> [short | [long | acc]] end)
+
+    option_names =
+      Enum.map(options, fn {_, opt} -> {opt.short, opt.long} end)
+      |> Enum.reduce([], fn {short, long}, acc -> [short | [long | acc]] end)
+
     conflicts =
-      (flag_keys ++ option_keys)
+      flag_names
+      |> Enum.reduce(option_names, fn key, acc -> [key | acc] end)
       |> Enum.frequencies()
       |> Enum.filter(fn {_, v} -> v != 1 end)
       |> Enum.map(fn {k, _} -> k end)
 
     cond do
-      bad_flag != nil -> {:error, :invalid_flag, bad_flag}
-      bad_option != nil -> {:error, :invalid_option, bad_option}
-      conflicts != [] -> {:error, :conflicting_key, List.first(conflicts)}
-      true -> :ok
+      bad_flag != nil ->
+        {:error, :invalid_flag, bad_flag}
+
+      bad_option != nil ->
+        {:error, :invalid_option, bad_option}
+
+      conflicts != [] ->
+        {:error, :conflicting_key, List.first(conflicts)}
+
+      required_option_has_default != nil ->
+        {:error, :required_option_has_default, required_option_has_default}
+
+      invalid_parser != nil ->
+        {:error, :invalid_parser, invalid_parser}
+
+      true ->
+        :ok
     end
   end
 
@@ -213,15 +240,12 @@ defmodule Vexil do
 
           {success, value} =
             case option.parser do
-              parser when parser in [:string, :integer, :float] ->
+              parser when parser in Parsers.all() ->
                 apply(Parsers, parser, [value])
 
               # Run custom parser
               parser when is_function(parser) ->
                 parser.(value)
-
-              parser ->
-                {:error, :unknown_parser, parser}
             end
 
           result =

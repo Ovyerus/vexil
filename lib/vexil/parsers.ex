@@ -23,4 +23,10 @@ defmodule Vexil.Parsers do
       _ -> {:error, "expected float, got `#{input}"}
     end
   end
+
+  defmacro all() do
+    quote do
+      [:string, :integer, :float]
+    end
+  end
 end
