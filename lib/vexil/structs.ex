@@ -14,6 +14,7 @@ defmodule Vexil.Structs do
     field :parser, Vexil.Parsers.custom() | Vexil.Parsers.builtins(), default: :string
     field :required, bool(), default: false
     # TODO: implement greedy up until a certain amount
+    # TODO: determine proper behaviour for how this should actually work in terms of results
     field :greedy, bool() | pos_integer(), default: false
     field :multiple, bool(), default: false
     field :default, any(), default: nil

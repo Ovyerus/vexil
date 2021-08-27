@@ -22,6 +22,7 @@ defmodule Vexil.MixProject do
   defp deps do
     [
       {:credo, "~> 1.5", only: [:dev, :test], runtime: false},
+      {:jason, "~> 1.2", only: [:dev, :test], runtime: false},
       {:typed_struct, "~> 0.2.1"}
     ]
   end

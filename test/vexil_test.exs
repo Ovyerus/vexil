@@ -19,17 +19,13 @@ defmodule VexilTest do
         }
       ]
 
-      assert Vexil.parse(["--foo"], flags: flags) ==
-               {:ok, %{argv: [], flags: [foo: true], options: []}, {[], []}}
+      result = {:ok, %{argv: [], flags: [foo: true], options: []}, {[], []}}
+      result2 = {:ok, %{argv: ["before", "after"], flags: [foo: true], options: []}, {[], []}}
 
-      assert Vexil.parse(["-f"], flags: flags) ==
-               {:ok, %{argv: [], flags: [foo: true], options: []}, {[], []}}
-
-      assert Vexil.parse(["before", "--foo", "after"], flags: flags) ==
-               {:ok, %{argv: ["before", "after"], flags: [foo: true], options: []}, {[], []}}
-
-      assert Vexil.parse(["before", "-f", "after"], flags: flags) ==
-               {:ok, %{argv: ["before", "after"], flags: [foo: true], options: []}, {[], []}}
+      assert Vexil.parse(["--foo"], flags: flags) == result
+      assert Vexil.parse(["-f"], flags: flags) == result
+      assert Vexil.parse(["before", "--foo", "after"], flags: flags) == result2
+      assert Vexil.parse(["before", "-f", "after"], flags: flags) == result2
     end
 
     test "parses multiple sequential flags" do
@@ -282,6 +278,243 @@ defmodule VexilTest do
       assert Vexil.parse(["--foo", "--bar", "-b"], flags: two) ==
                {:ok, %{argv: [], flags: [foo: 1, bar: true], options: []},
                 {[], [{:error, :duplicate_flag, :bar}]}}
+    end
+
+    test "parses a simple option" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      result = {:ok, %{argv: [], flags: [], options: [foo: "bar"]}, {[], []}}
+      result2 = {:ok, %{argv: ["before", "after"], flags: [], options: [foo: "bar"]}, {[], []}}
+
+      assert Vexil.parse(["-f", "bar"], options: options) == result
+      assert Vexil.parse(["--foo", "bar"], options: options) == result
+      # Make sure we split on an equals directly after
+      assert Vexil.parse(["-f=bar"], options: options) == result
+      assert Vexil.parse(["--foo=bar"], options: options) == result
+
+      assert Vexil.parse(["before", "-f", "bar", "after"], options: options) == result2
+      assert Vexil.parse(["before", "--foo", "bar", "after"], options: options) == result2
+      assert Vexil.parse(["before", "-f=bar", "after"], options: options) == result2
+      assert Vexil.parse(["before", "--foo=bar", "after"], options: options) == result2
+    end
+
+    test "parses multiple consecutive options" do
+      foo = %Structs.Option{
+        short: "f",
+        long: "foo"
+      }
+
+      bar = %Structs.Option{
+        short: "b",
+        long: "bar"
+      }
+
+      qux = %Structs.Option{
+        short: "q",
+        long: "qux"
+      }
+
+      options = [foo: foo, bar: bar, qux: qux]
+
+      result =
+        {:ok, %{argv: [], flags: [], options: [foo: "bar", bar: "baz", qux: "qux"]}, {[], []}}
+
+      result2 =
+        {:ok, %{argv: [], flags: [], options: [foo: "bar", bar: "baz", qux: nil]}, {[], []}}
+
+      assert Vexil.parse(["--foo", "bar", "--bar", "baz", "--qux", "qux"], options: options) ==
+               result
+
+      assert Vexil.parse(["-f", "bar", "-b", "baz", "-q", "qux"], options: options) == result
+      assert Vexil.parse(["-f=bar", "-b=baz", "-q=qux"], options: options) == result
+      assert Vexil.parse(["--foo=bar", "--bar=baz", "--qux=qux"], options: options) == result
+
+      assert Vexil.parse(["--foo", "bar", "--bar", "baz"], options: options) == result2
+      assert Vexil.parse(["-f", "bar", "-b", "baz"], options: options) == result2
+      assert Vexil.parse(["-f=bar", "-b=baz"], options: options) == result2
+      assert Vexil.parse(["--foo=bar", "--bar=baz"], options: options) == result2
+    end
+
+    test "parses a simple option with a default" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          default: "foo-default"
+        }
+      ]
+
+      assert Vexil.parse([], options: options) ==
+               {:ok, %{argv: [], flags: [], options: [foo: "foo-default"]}, {[], []}}
+
+      assert Vexil.parse(["foobar"], options: options) ==
+               {:ok, %{argv: ["foobar"], flags: [], options: [foo: "foo-default"]}, {[], []}}
+
+      assert Vexil.parse(["--foo", "bar"], options: options) ==
+               {:ok, %{argv: [], flags: [], options: [foo: "bar"]}, {[], []}}
+    end
+
+    test "parses a greedy option which collects all arguments until the next option it sees" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          greedy: true
+        },
+        bar: %Structs.Option{
+          short: "b",
+          long: "bar"
+        }
+      ]
+
+      result =
+        {:ok, %{argv: [], flags: [], options: [foo: "bar baz bang qux xyzzy", bar: nil]},
+         {[], []}}
+
+      result2 =
+        {:ok, %{argv: [], flags: [], options: [foo: "bar baz bang qux xyzzy", bar: "shrug"]},
+         {[], []}}
+
+      assert Vexil.parse(["--foo", "bar", "baz", "bang", "qux", "xyzzy"], options: options) ==
+               result
+
+      assert Vexil.parse(["-f", "bar", "baz", "bang", "qux", "xyzzy"], options: options) == result
+      assert Vexil.parse(["--foo=bar", "baz", "bang", "qux", "xyzzy"], options: options) == result
+      assert Vexil.parse(["-f=bar", "baz", "bang", "qux", "xyzzy"], options: options) == result
+
+      assert Vexil.parse(
+               ["--foo", "bar", "baz", "bang", "qux", "xyzzy", "--bar", "shrug"],
+               options: options
+             ) == result2
+
+      assert Vexil.parse(
+               ["-f", "bar", "baz", "bang", "qux", "xyzzy", "--bar", "shrug"],
+               options: options
+             ) == result2
+
+      assert Vexil.parse(
+               ["--foo=bar", "baz", "bang", "qux", "xyzzy", "--bar", "shrug"],
+               options: options
+             ) == result2
+
+      assert Vexil.parse(
+               ["-f=bar", "baz", "bang", "qux", "xyzzy", "--bar", "shrug"],
+               options: options
+             ) == result2
+    end
+
+    # TODO: testing for greedy with a max limit
+
+    test "allows for integer and float parsers for an option" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          parser: :integer
+        },
+        bar: %Structs.Option{
+          short: "b",
+          long: "bar",
+          parser: :float
+        }
+      ]
+
+      result = {:ok, %{argv: [], flags: [], options: [foo: 31, bar: 5.3]}, {[], []}}
+
+      assert Vexil.parse(["--foo", "31", "--bar", "5.3"], options: options) == result
+      assert Vexil.parse(["-f", "31", "-b", "5.3"], options: options) == result
+      assert Vexil.parse(["--foo=31", "--bar=5.3"], options: options) == result
+      assert Vexil.parse(["-f=31", "-b=5.3"], options: options) == result
+    end
+
+    @tag :only
+    test "allows a custom parser for options" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          parser: fn val ->
+            Jason.decode(val)
+          end
+        }
+      ]
+
+      result = {:ok, %{argv: [], flags: [], options: [foo: %{"bar" => "baz"}]}, {[], []}}
+
+      assert Vexil.parse(["--foo", ~s({"bar": "baz"})], options: options) == result
+      assert Vexil.parse(["-f", ~s({"bar": "baz"})], options: options) == result
+
+      # TODO: would we need to do manual quote parsing for `=` with spaces? Need to look into how OptionParser.split works (maybe end up providing our own)
+      # assert Vexil.parse([~s(--foo={"bar": "baz"})], options: options) == result
+      # assert Vexil.parse([~s(-f={"bar": "baz"})], options: options) == result
+    end
+
+    test "allows greedy option with a custom parser" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          greedy: true,
+          parser: fn val ->
+            try do
+              {:ok, val |> String.split(" ") |> Enum.map(&String.to_integer(&1))}
+            rescue
+              e -> {:error, e}
+            end
+          end
+        }
+      ]
+
+      result = {:ok, %{argv: [], flags: [], options: [foo: [1, 2, 3, 4, 5]]}, {[], []}}
+
+      assert Vexil.parse(["--foo", "1", "2", "3", "4", "5"], options: options) == result
+      assert Vexil.parse(["-f", "1", "2", "3", "4", "5"], options: options) == result
+      assert Vexil.parse(["--foo=1", "2", "3", "4", "5"], options: options) == result
+      assert Vexil.parse(["-f=1", "2", "3", "4", "5"], options: options) == result
+    end
+
+    test "allows usage of options being declared multiple times" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          multiple: true
+        },
+        bar: %Structs.Option{
+          short: "b",
+          long: "bar",
+          multiple: true
+        }
+      ]
+
+      result =
+        {:ok, %{argv: [], flags: [], options: [foo: ["bar", "baz"], bar: ["bar", "baz"]]},
+         {[], []}}
+
+      assert Vexil.parse(["--foo", "bar", "--foo", "baz", "--bar", "bar", "--bar", "baz"],
+               options: options
+             ) == result
+
+      assert Vexil.parse(["--foo", "bar", "--bar", "bar", "--foo", "baz", "--bar", "baz"],
+               options: options
+             ) == result
+
+      assert Vexil.parse(["-f", "bar", "-f", "baz", "-b", "bar", "-b", "baz"], options: options) ==
+               result
+
+      assert Vexil.parse(["-f", "bar", "-b", "bar", "-f", "baz", "-b", "baz"], options: options) ==
+               result
+
+      assert Vexil.parse(["-f", "bar", "-f=baz", "-b", "bar", "-b", "baz"], options: options) ==
+               result
+
+      assert Vexil.parse(["-f", "bar", "-b=bar", "-f", "baz", "-b", "baz"], options: options) ==
+               result
     end
   end
 end
