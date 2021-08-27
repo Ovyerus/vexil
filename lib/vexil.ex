@@ -206,7 +206,7 @@ defmodule Vexil do
               Utils.consume_argv_greedy(tail)
             else
               [head | tail] = tail
-              {head, tail}
+              {[head], tail}
             end
 
           value = Enum.join(value, " ")
@@ -248,8 +248,18 @@ defmodule Vexil do
         found_options =
           seen_options
           |> Enum.filter(&match?({:ok, _, _}, &1))
-          # Remove leading `:ok` from tuples
-          |> Enum.map(&Tuple.delete_at(&1, 0))
+          |> Enum.reduce([], fn {_, name, value}, acc ->
+            cond do
+              wanted_options[name].multiple and acc[name] ->
+                Keyword.put(acc, name, [value | acc[name]])
+
+              wanted_options[name].multiple ->
+                Keyword.put(acc, name, [value])
+
+              true ->
+                Keyword.put(acc, name, value)
+            end
+          end)
 
         found_names = Enum.map(found_options, &elem(&1, 0))
 
@@ -260,8 +270,10 @@ defmodule Vexil do
             _ -> false
           end)
 
-        # TODO: merge `multiple` options into the same list item which is `{:ok, list(blah blah)}`
-        # TODO: apply defaults when provided (default to nil if not provided?)
+        defaulted_options =
+          wanted_options
+          |> Enum.filter(fn {name, opt} -> not opt.required and name not in found_names end)
+          |> Enum.map(fn {name, opt} -> {name, opt.default} end)
 
         missing =
           wanted_options
@@ -276,7 +288,7 @@ defmodule Vexil do
         else
           {
             :ok,
-            found_options,
+            found_options ++ defaulted_options,
             all_errors,
             Enum.reverse(remainder)
           }
@@ -287,12 +299,13 @@ defmodule Vexil do
         consume_option.(long, tail, :long)
 
       ["-" <> short = original | tail] ->
+        {short, tail} = Utils.split_eq(short, tail)
+
         if String.length(short) > 1 do
           find_options(tail, wanted_options, wanted_flags, error_early, seen_options, [
             original | remainder
           ])
         else
-          {short, tail} = Utils.split_eq(short, tail)
           consume_option.(short, tail, :short)
         end
 
