@@ -21,7 +21,7 @@ defmodule Vexil do
           | {:obey_double_dash, boolean()}
           | {:error_early, boolean()}
   @type parse_spec() :: list(parse_spec_item())
-  @type parsed_items() :: %{:flags => parsed_flags(), :options => parsed_options(), argv: argv()}
+  @type parsed_items() :: %{flags: parsed_flags(), options: parsed_options(), argv: argv()}
   @type parse_result() ::
           {:ok, parsed_items(), {list(find_options_error()), list(find_flags_error())}}
           | validate_opts_error()
@@ -35,14 +35,14 @@ defmodule Vexil do
           | {:error, :invalid_value, atom(), String.t()}
           | {:error, :missing_required_options, list(atom())}
           | {:error, :unknown_parser, atom()}
-  @type parsed_options() :: list({atom(), any()})
+  @type parsed_options() :: %{atom() => any()}
   @type find_options_result() ::
           {:ok, parsed_options(), list(find_options_error()), argv()} | find_options_error()
 
   @type find_flags_error() ::
           {:error, :unknown_flag, String.t()}
           | {:error, :duplicate_flag, atom()}
-  @type parsed_flags() :: list({atom(), pos_integer() | true})
+  @type parsed_flags() :: %{atom() => pos_integer() | boolean()}
   @type find_flags_result() ::
           {:ok, parsed_flags(), list(find_flags_error()), argv()}
           | find_flags_error()
@@ -325,9 +325,11 @@ defmodule Vexil do
         if error_early && missing do
           missing
         else
+          result = (found_options ++ defaulted_options) |> Enum.into(%{})
+
           {
             :ok,
-            found_options ++ defaulted_options,
+            result,
             all_errors,
             Enum.reverse(remainder)
           }
@@ -471,8 +473,9 @@ defmodule Vexil do
           |> Enum.map(fn {name, _} -> {name, false} end)
 
         all_errors = seen_flags |> Enum.filter(&match?({:error, _type, _arg0}, &1)) |> Enum.uniq()
+        result = (found_flags ++ unprovided_flags) |> Enum.into(%{})
 
-        {:ok, found_flags ++ unprovided_flags, all_errors, Enum.reverse(remainder)}
+        {:ok, result, all_errors, Enum.reverse(remainder)}
 
       ["--" <> long | tail] ->
         consume_flag.([long], tail, :long)

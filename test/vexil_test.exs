@@ -10,8 +10,13 @@ defmodule VexilTest do
 
     test "passes through argv when no options or flags" do
       assert Vexil.parse(["foo", "bar"]) ==
-               {:ok, %{argv: ["foo", "bar"], flags: [], options: []}, {[], []}}
+               {:ok, %{argv: ["foo", "bar"], flags: %{}, options: %{}}, {[], []}}
     end
+
+    # test "returns an error when there's a bad item given as a flag" do
+    #   # TODO: need to validate that flags and options are keyword lists
+    #   assert Vexil.parse(["foo"], flags: [""]) == []
+    # end
   end
 
   describe "parse/2 - flags" do
@@ -26,8 +31,8 @@ defmodule VexilTest do
         }
       ]
 
-      result = {:ok, %{argv: [], flags: [foo: true], options: []}, {[], []}}
-      result2 = {:ok, %{argv: ["before", "after"], flags: [foo: true], options: []}, {[], []}}
+      result = {:ok, %{argv: [], flags: %{foo: true}, options: %{}}, {[], []}}
+      result2 = {:ok, %{argv: ["before", "after"], flags: %{foo: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["--foo"], flags: flags) == result
       assert Vexil.parse(["-f"], flags: flags) == result
@@ -64,57 +69,62 @@ defmodule VexilTest do
       # Maybe use stream_data
 
       assert Vexil.parse(["--foo", "--bar"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["--foo", "--bar", "--qux"], flags: three) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true, qux: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true, qux: true}, options: %{}},
+                {[], []}}
 
       assert Vexil.parse(["--foo", "--bar", "--qux", "--xyzzy"], flags: four) ==
                {:ok,
-                %{argv: [], flags: [foo: true, bar: true, qux: true, xyzzy: true], options: []},
+                %{argv: [], flags: %{foo: true, bar: true, qux: true, xyzzy: true}, options: %{}},
                 {[], []}}
 
       # And now test all the short flags
       assert Vexil.parse(["-f", "-b"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-f", "-b", "-q"], flags: three) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true, qux: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true, qux: true}, options: %{}},
+                {[], []}}
 
       assert Vexil.parse(["-f", "-b", "-q", "-x"], flags: four) ==
                {:ok,
-                %{argv: [], flags: [foo: true, bar: true, qux: true, xyzzy: true], options: []},
+                %{argv: [], flags: %{foo: true, bar: true, qux: true, xyzzy: true}, options: %{}},
                 {[], []}}
 
       # And now test several mixes of short and long flags
       assert Vexil.parse(["-f", "--bar"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-f", "--bar", "-q"], flags: three) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true, qux: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true, qux: true}, options: %{}},
+                {[], []}}
 
       assert Vexil.parse(["-f", "--bar", "-q", "-x"], flags: four) ==
                {:ok,
-                %{argv: [], flags: [foo: true, bar: true, qux: true, xyzzy: true], options: []},
+                %{argv: [], flags: %{foo: true, bar: true, qux: true, xyzzy: true}, options: %{}},
                 {[], []}}
 
       assert Vexil.parse(["--foo", "-b"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["--foo", "-b", "-q"], flags: three) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true, qux: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true, qux: true}, options: %{}},
+                {[], []}}
 
       assert Vexil.parse(["--foo", "-b", "-q", "-x"], flags: four) ==
                {:ok,
-                %{argv: [], flags: [foo: true, bar: true, qux: true, xyzzy: true], options: []},
+                %{argv: [], flags: %{foo: true, bar: true, qux: true, xyzzy: true}, options: %{}},
                 {[], []}}
 
       assert Vexil.parse(["-f", "--bar", "--qux"], flags: three) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true, qux: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true, qux: true}, options: %{}},
+                {[], []}}
 
       assert Vexil.parse(["-f", "--bar", "--qux", "-x"], flags: four) ==
                {:ok,
-                %{argv: [], flags: [foo: true, bar: true, qux: true, xyzzy: true], options: []},
+                %{argv: [], flags: %{foo: true, bar: true, qux: true, xyzzy: true}, options: %{}},
                 {[], []}}
     end
 
@@ -144,19 +154,20 @@ defmodule VexilTest do
       four = [foo: foo, bar: bar, qux: qux, xyzzy: xyzzy]
 
       assert Vexil.parse(["-fb"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-fbq"], flags: three) ==
-               {:ok, %{argv: [], flags: [foo: true, bar: true, qux: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: true, bar: true, qux: true}, options: %{}},
+                {[], []}}
 
       assert Vexil.parse(["-fbqx"], flags: four) ==
                {:ok,
-                %{argv: [], flags: [foo: true, bar: true, qux: true, xyzzy: true], options: []},
+                %{argv: [], flags: %{foo: true, bar: true, qux: true, xyzzy: true}, options: %{}},
                 {[], []}}
 
       assert Vexil.parse(["-fb", "-qx"], flags: four) ==
                {:ok,
-                %{argv: [], flags: [foo: true, bar: true, qux: true, xyzzy: true], options: []},
+                %{argv: [], flags: %{foo: true, bar: true, qux: true, xyzzy: true}, options: %{}},
                 {[], []}}
     end
 
@@ -176,37 +187,37 @@ defmodule VexilTest do
       two = [foo: foo, bar: bar]
 
       assert Vexil.parse(["-f"], flags: one) ==
-               {:ok, %{argv: [], flags: [foo: 1], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 1}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-f", "-f"], flags: one) ==
-               {:ok, %{argv: [], flags: [foo: 2], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 2}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-f", "-f", "-f"], flags: one) ==
-               {:ok, %{argv: [], flags: [foo: 3], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 3}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-ff"], flags: one) ==
-               {:ok, %{argv: [], flags: [foo: 2], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 2}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-fff"], flags: one) ==
-               {:ok, %{argv: [], flags: [foo: 3], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 3}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-ff", "-f"], flags: one) ==
-               {:ok, %{argv: [], flags: [foo: 3], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 3}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-f", "-b"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: 1, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 1, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-f", "-b", "-f"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: 2, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 2, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-ffb"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: 2, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 2, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-fbf"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: 2, bar: true], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{foo: 2, bar: true}, options: %{}}, {[], []}}
 
       assert Vexil.parse(["-bf"], flags: two) ==
-               {:ok, %{argv: [], flags: [bar: true, foo: 1], options: []}, {[], []}}
+               {:ok, %{argv: [], flags: %{bar: true, foo: 1}, options: %{}}, {[], []}}
     end
 
     test "has an error in the relevant list when seeing an unknown flag" do
@@ -220,15 +231,15 @@ defmodule VexilTest do
 
       # Need to use groups to test this as it gets seen as an option otherwise
       assert Vexil.parse(["-fb"], flags: []) ==
-               {:ok, %{argv: [], flags: [], options: []},
+               {:ok, %{argv: [], flags: %{}, options: %{}},
                 {[], [{:error, :unknown_flag, "f"}, {:error, :unknown_flag, "b"}]}}
 
       assert Vexil.parse(["-fb"], flags: flags) ==
-               {:ok, %{argv: [], flags: [foo: 1], options: []},
+               {:ok, %{argv: [], flags: %{foo: 1}, options: %{}},
                 {[], [{:error, :unknown_flag, "b"}]}}
 
       assert Vexil.parse(["--foo", "-fb"], flags: flags) ==
-               {:ok, %{argv: [], flags: [foo: 2], options: []},
+               {:ok, %{argv: [], flags: %{foo: 2}, options: %{}},
                 {[], [{:error, :unknown_flag, "b"}]}}
     end
 
@@ -267,25 +278,23 @@ defmodule VexilTest do
       one = [bar: bar]
       two = [foo: foo, bar: bar]
 
-      assert Vexil.parse(["--bar", "--bar"], flags: one) ==
-               {:ok, %{argv: [], flags: [bar: true], options: []},
-                {[], [{:error, :duplicate_flag, :bar}]}}
+      result = {
+        :ok,
+        %{argv: [], flags: %{bar: true}, options: %{}},
+        {[], [{:error, :duplicate_flag, :bar}]}
+      }
 
-      assert Vexil.parse(["-b", "-b"], flags: one) ==
-               {:ok, %{argv: [], flags: [bar: true], options: []},
-                {[], [{:error, :duplicate_flag, :bar}]}}
-
-      assert Vexil.parse(["--bar", "-b"], flags: one) ==
-               {:ok, %{argv: [], flags: [bar: true], options: []},
-                {[], [{:error, :duplicate_flag, :bar}]}}
-
-      assert Vexil.parse(["-bb"], flags: one) ==
-               {:ok, %{argv: [], flags: [bar: true], options: []},
-                {[], [{:error, :duplicate_flag, :bar}]}}
+      assert Vexil.parse(["--bar", "--bar"], flags: one) == result
+      assert Vexil.parse(["-b", "-b"], flags: one) == result
+      assert Vexil.parse(["--bar", "-b"], flags: one) == result
+      assert Vexil.parse(["-bb"], flags: one) == result
 
       assert Vexil.parse(["--foo", "--bar", "-b"], flags: two) ==
-               {:ok, %{argv: [], flags: [foo: 1, bar: true], options: []},
-                {[], [{:error, :duplicate_flag, :bar}]}}
+               {
+                 :ok,
+                 %{argv: [], flags: %{foo: 1, bar: true}, options: %{}},
+                 {[], [{:error, :duplicate_flag, :bar}]}
+               }
     end
   end
 
@@ -301,8 +310,8 @@ defmodule VexilTest do
         }
       ]
 
-      result = {:ok, %{argv: [], flags: [], options: [foo: "bar"]}, {[], []}}
-      result2 = {:ok, %{argv: ["before", "after"], flags: [], options: [foo: "bar"]}, {[], []}}
+      result = {:ok, %{argv: [], flags: %{}, options: %{foo: "bar"}}, {[], []}}
+      result2 = {:ok, %{argv: ["before", "after"], flags: %{}, options: %{foo: "bar"}}, {[], []}}
 
       assert Vexil.parse(["-f", "bar"], options: options) == result
       assert Vexil.parse(["--foo", "bar"], options: options) == result
@@ -335,10 +344,10 @@ defmodule VexilTest do
       options = [foo: foo, bar: bar, qux: qux]
 
       result =
-        {:ok, %{argv: [], flags: [], options: [foo: "bar", bar: "baz", qux: "qux"]}, {[], []}}
+        {:ok, %{argv: [], flags: %{}, options: %{foo: "bar", bar: "baz", qux: "qux"}}, {[], []}}
 
       result2 =
-        {:ok, %{argv: [], flags: [], options: [foo: "bar", bar: "baz", qux: nil]}, {[], []}}
+        {:ok, %{argv: [], flags: %{}, options: %{foo: "bar", bar: "baz", qux: nil}}, {[], []}}
 
       assert Vexil.parse(["--foo", "bar", "--bar", "baz", "--qux", "qux"], options: options) ==
                result
@@ -363,13 +372,13 @@ defmodule VexilTest do
       ]
 
       assert Vexil.parse([], options: options) ==
-               {:ok, %{argv: [], flags: [], options: [foo: "foo-default"]}, {[], []}}
+               {:ok, %{argv: [], flags: %{}, options: %{foo: "foo-default"}}, {[], []}}
 
       assert Vexil.parse(["foobar"], options: options) ==
-               {:ok, %{argv: ["foobar"], flags: [], options: [foo: "foo-default"]}, {[], []}}
+               {:ok, %{argv: ["foobar"], flags: %{}, options: %{foo: "foo-default"}}, {[], []}}
 
       assert Vexil.parse(["--foo", "bar"], options: options) ==
-               {:ok, %{argv: [], flags: [], options: [foo: "bar"]}, {[], []}}
+               {:ok, %{argv: [], flags: %{}, options: %{foo: "bar"}}, {[], []}}
     end
 
     test "parses a greedy option which collects all arguments until the next option it sees" do
@@ -385,18 +394,25 @@ defmodule VexilTest do
         }
       ]
 
-      result =
-        {:ok,
-         %{argv: [], flags: [], options: [foo: ["bar", "baz", "bang", "qux", "xyzzy"], bar: nil]},
-         {[], []}}
+      result = {
+        :ok,
+        %{
+          argv: [],
+          flags: %{},
+          options: %{foo: ["bar", "baz", "bang", "qux", "xyzzy"], bar: nil}
+        },
+        {[], []}
+      }
 
-      result2 =
-        {:ok,
-         %{
-           argv: [],
-           flags: [],
-           options: [foo: ["bar", "baz", "bang", "qux", "xyzzy"], bar: "shrug"]
-         }, {[], []}}
+      result2 = {
+        :ok,
+        %{
+          argv: [],
+          flags: %{},
+          options: %{foo: ["bar", "baz", "bang", "qux", "xyzzy"], bar: "shrug"}
+        },
+        {[], []}
+      }
 
       assert Vexil.parse(["--foo", "bar", "baz", "bang", "qux", "xyzzy"], options: options) ==
                result
@@ -442,7 +458,7 @@ defmodule VexilTest do
         }
       ]
 
-      result = {:ok, %{argv: [], flags: [], options: [foo: 31, bar: 5.3]}, {[], []}}
+      result = {:ok, %{argv: [], flags: %{}, options: %{foo: 31, bar: 5.3}}, {[], []}}
 
       assert Vexil.parse(["--foo", "31", "--bar", "5.3"], options: options) == result
       assert Vexil.parse(["-f", "31", "-b", "5.3"], options: options) == result
@@ -462,7 +478,7 @@ defmodule VexilTest do
         }
       ]
 
-      result = {:ok, %{argv: [], flags: [], options: [foo: %{"bar" => "baz"}]}, {[], []}}
+      result = {:ok, %{argv: [], flags: %{}, options: %{foo: %{"bar" => "baz"}}}, {[], []}}
 
       assert Vexil.parse(["--foo", ~s({"bar": "baz"})], options: options) == result
       assert Vexil.parse(["-f", ~s({"bar": "baz"})], options: options) == result
@@ -488,7 +504,7 @@ defmodule VexilTest do
         }
       ]
 
-      result = {:ok, %{argv: [], flags: [], options: [foo: [1, 2, 3, 4, 5]]}, {[], []}}
+      result = {:ok, %{argv: [], flags: %{}, options: %{foo: [1, 2, 3, 4, 5]}}, {[], []}}
 
       assert Vexil.parse(["--foo", "1", "2", "3", "4", "5"], options: options) == result
       assert Vexil.parse(["-f", "1", "2", "3", "4", "5"], options: options) == result
@@ -510,9 +526,11 @@ defmodule VexilTest do
         }
       ]
 
-      result =
-        {:ok, %{argv: [], flags: [], options: [foo: ["bar", "baz"], bar: ["bar", "baz"]]},
-         {[], []}}
+      result = {
+        :ok,
+        %{argv: [], flags: %{}, options: %{foo: ["bar", "baz"], bar: ["bar", "baz"]}},
+        {[], []}
+      }
 
       assert Vexil.parse(["--foo", "bar", "--foo", "baz", "--bar", "bar", "--bar", "baz"],
                options: options
