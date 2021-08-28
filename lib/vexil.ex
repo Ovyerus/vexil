@@ -237,16 +237,14 @@ defmodule Vexil do
               {[head], tail}
             end
 
-          value = Enum.join(value, " ")
-
           {success, value} =
             case option.parser do
               parser when parser in Parsers.all() ->
-                apply(Parsers, parser, [value])
+                apply(Parsers, parser, [value, option.greedy])
 
               # Run custom parser
               parser when is_function(parser) ->
-                parser.(value)
+                parser.(value, option.greedy)
             end
 
           result =
@@ -274,12 +272,28 @@ defmodule Vexil do
           seen_options
           |> Enum.filter(&match?({:ok, _, _}, &1))
           |> Enum.reduce([], fn {_, name, value}, acc ->
-            cond do
-              wanted_options[name].multiple and acc[name] ->
-                Keyword.put(acc, name, [value | acc[name]])
+            should_be_list = wanted_options[name].multiple || wanted_options[name].greedy
 
-              wanted_options[name].multiple ->
-                Keyword.put(acc, name, [value])
+            cond do
+              should_be_list and acc[name] ->
+                val =
+                  case value do
+                    [item] -> [item | acc[name]]
+                    # might need to fiddle with some ordering memes (or just dont care about ordering)
+                    [_ | _] -> value ++ acc[name]
+                    _ -> [value | acc[name]]
+                  end
+
+                Keyword.put(acc, name, val)
+
+              should_be_list ->
+                val =
+                  case value do
+                    [_ | _] -> value
+                    _ -> [value]
+                  end
+
+                Keyword.put(acc, name, val)
 
               true ->
                 Keyword.put(acc, name, value)
