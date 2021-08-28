@@ -61,7 +61,8 @@ defmodule Vexil do
          {argv, argv_remainder} <- Utils.split_double_dash(argv, double_dash),
          {:ok, options, option_errors, argv} <-
            find_options(argv, opt_options, opt_flags, error_early),
-         {:ok, flags, flag_errors, argv} <- find_flags(argv, opt_flags, opt_options, error_early) do
+         {:ok, flags, flag_errors, argv} <-
+           find_flags(argv, opt_flags, opt_options, error_early) do
       {
         :ok,
         %{flags: flags, options: options, argv: argv ++ argv_remainder},
@@ -351,7 +352,8 @@ defmodule Vexil do
        ) do
     consume_flag = fn lookups, tail, comparison_key ->
       results =
-        for lookup_name <- lookups do
+        lookups
+        |> Enum.reduce({[], []}, fn lookup_name, {result_acc, name_acc} ->
           {name, flag} =
             Enum.find(wanted_flags, {nil, nil}, fn {_, flag} ->
               case comparison_key do
@@ -375,27 +377,41 @@ defmodule Vexil do
             # lazy to do so right now oopsie)
             is_option ->
               prefix = if comparison_key == :long, do: "--", else: "-"
-              {:remainder, prefix <> lookup_name}
+              value = {:remainder, prefix <> lookup_name}
+
+              {[value | result_acc], name_acc}
 
             !flag ->
-              {:error, :unknown_flag, lookup_name}
+              value = {:error, :unknown_flag, lookup_name}
 
-            not flag.multiple and seen_flags[name] ->
-              {:error, :duplicate_flag, name}
+              {[value | result_acc], name_acc}
+
+            # TODO: there's probably a more elegant solution to this
+            not flag.multiple &&
+                (name in name_acc ||
+                   Enum.find(seen_flags, fn
+                     {:ok, flag_name, _} -> flag_name == name
+                     _ -> false
+                   end)) ->
+              value = {:error, :duplicate_flag, name}
+
+              {[value | result_acc], name_acc}
 
             true ->
-              {:ok, name, true}
-          end
-        end
+              value = {:ok, name, true}
 
-      first_error = results |> Enum.reverse() |> Enum.find(&match?({:error, _, _}, &1))
+              {[value | result_acc], [name | name_acc]}
+          end
+        end)
+        |> elem(0)
+
+      first_error = results |> Enum.find(&match?({:error, _, _}, &1))
       results_no_remainders = Enum.filter(results, fn x -> !match?({:remainder, _, _}, x) end)
 
       remainders =
         results
         |> Enum.filter(&match?({:remainder, _}, &1))
         |> Enum.map(&elem(&1, 1))
-        |> Enum.reverse()
 
       if error_early and first_error,
         do: first_error,
