@@ -6,10 +6,17 @@ defmodule VexilTest do
   doctest Vexil
 
   describe "parse/2" do
+    @describetag :parse
+
     test "passes through argv when no options or flags" do
       assert Vexil.parse(["foo", "bar"]) ==
                {:ok, %{argv: ["foo", "bar"], flags: [], options: []}, {[], []}}
     end
+  end
+
+  describe "parse/2 - flags" do
+    @describetag :parse
+    @describetag :flags
 
     test "parses a simple flag" do
       flags = [
@@ -214,7 +221,7 @@ defmodule VexilTest do
       # Need to use groups to test this as it gets seen as an option otherwise
       assert Vexil.parse(["-fb"], flags: []) ==
                {:ok, %{argv: [], flags: [], options: []},
-                {[], [{:error, :unknown_flag, "b"}, {:error, :unknown_flag, "f"}]}}
+                {[], [{:error, :unknown_flag, "f"}, {:error, :unknown_flag, "b"}]}}
 
       assert Vexil.parse(["-fb"], flags: flags) ==
                {:ok, %{argv: [], flags: [foo: 1], options: []},
@@ -244,6 +251,7 @@ defmodule VexilTest do
                {:error, :unknown_flag, "b"}
     end
 
+    @tag :only
     test "has an error in the relevant list when seeing a duplicate flag" do
       foo = %Structs.Flag{
         short: "f",
@@ -279,6 +287,11 @@ defmodule VexilTest do
                {:ok, %{argv: [], flags: [foo: 1, bar: true], options: []},
                 {[], [{:error, :duplicate_flag, :bar}]}}
     end
+  end
+
+  describe "parse/2 - options" do
+    @describetag :parse
+    @describetag :options
 
     test "parses a simple option" do
       options = [
@@ -373,12 +386,17 @@ defmodule VexilTest do
       ]
 
       result =
-        {:ok, %{argv: [], flags: [], options: [foo: "bar baz bang qux xyzzy", bar: nil]},
+        {:ok,
+         %{argv: [], flags: [], options: [foo: ["bar", "baz", "bang", "qux", "xyzzy"], bar: nil]},
          {[], []}}
 
       result2 =
-        {:ok, %{argv: [], flags: [], options: [foo: "bar baz bang qux xyzzy", bar: "shrug"]},
-         {[], []}}
+        {:ok,
+         %{
+           argv: [],
+           flags: [],
+           options: [foo: ["bar", "baz", "bang", "qux", "xyzzy"], bar: "shrug"]
+         }, {[], []}}
 
       assert Vexil.parse(["--foo", "bar", "baz", "bang", "qux", "xyzzy"], options: options) ==
                result
@@ -432,13 +450,13 @@ defmodule VexilTest do
       assert Vexil.parse(["-f=31", "-b=5.3"], options: options) == result
     end
 
-    @tag :only
     test "allows a custom parser for options" do
       options = [
         foo: %Structs.Option{
           short: "f",
           long: "foo",
-          parser: fn val ->
+          # TODO: maybe more elegant solution for custom parsers so we don't need any empty second arg when not greedy? (only pass it when actually greedy??)
+          parser: fn val, _greedy ->
             Jason.decode(val)
           end
         }
@@ -460,9 +478,9 @@ defmodule VexilTest do
           short: "f",
           long: "foo",
           greedy: true,
-          parser: fn val ->
+          parser: fn input, _greedy ->
             try do
-              {:ok, val |> String.split(" ") |> Enum.map(&String.to_integer(&1))}
+              {:ok, Enum.map(input, &String.to_integer/1)}
             rescue
               e -> {:error, e}
             end
@@ -517,4 +535,6 @@ defmodule VexilTest do
                result
     end
   end
+
+  # TODO: tests for using flags and options at the same time. Just need to make sure they work properly together.
 end
