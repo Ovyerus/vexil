@@ -8,6 +8,9 @@ defmodule Vexil.Errors do
   defmodule InvalidFlagError, do: defexception([:key, message: "invalid flag given"])
   defmodule InvalidOptionError, do: defexception([:key, message: "invalid option given"])
 
+  defmodule RequiredOptionHasDefaultError,
+    do: defexception([:key, message: "required option has default value"])
+
   defmodule ConflictingKeyError,
     do: defexception([:key, message: "conflicting key between flags and options"])
 
@@ -19,11 +22,11 @@ defmodule Vexil.Errors do
 
   defmodule RequiredOptionError, do: defexception([:keys, message: "required options missing"])
 
-  defmodule UnknownParserError,
+  defmodule InvalidParserError,
     do:
       defexception([
         :key,
-        message: "unknown parser, must be :string, :integer, :float, or a unary function"
+        message: "invalid parser, must be :string, :integer, :float, or a unary function"
       ])
 
   defmodule UnknownFlagError, do: defexception([:key, message: "unknown flag"])

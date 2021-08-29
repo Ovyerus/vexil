@@ -17,6 +17,12 @@ defmodule Vexil.Utils do
 
   def bangify_parse_error(err) do
     case err do
+      {:error, :flags_not_keywords} ->
+        raise ArgumentError, "flags must be a keyword list"
+
+      {:error, :options_not_keywords} ->
+        raise ArgumentError, "options must be a keyword list"
+
       {:error, :invalid_argv} ->
         raise Errors.ArgvError
 
@@ -30,10 +36,21 @@ defmodule Vexil.Utils do
           key: key,
           message: "invalid option given '#{key}', must be `Vexil.Structs.Option`"
 
+      {:error, :required_option_has_default, key} ->
+        raise Errors.RequiredOptionHasDefaultError,
+          key: key,
+          message: "required option '#{key}' has a default value"
+
       {:error, :conflicting_key, key} ->
         raise Errors.ConflictingKeyError,
           key: key,
           message: "conflicting key '#{key}' given between flags and options"
+
+      {:error, :invalid_parser, key} ->
+        raise Errors.InvalidParserError,
+          key: key,
+          message:
+            "invalid parser for option '#{key}', must be :string, :integer, :float, or a unary function"
 
       {:error, :unknown_option, key} ->
         raise Errors.UnknownOptionError, key: key, message: "unknown option '#{key}'"
@@ -51,12 +68,6 @@ defmodule Vexil.Utils do
         raise Errors.RequiredOptionError,
           keys: keys,
           message: "missing required options '#{keys}'"
-
-      {:error, :unknown_parser, key} ->
-        raise Errors.UnknownParserError,
-          key: key,
-          message:
-            "unknown parser for option '#{key}', must be :string, :integer, :float, or a unary function"
 
       {:error, :unknown_flag, key} ->
         raise Errors.UnknownFlagError, key: key, message: "unknown flag '#{key}'"
