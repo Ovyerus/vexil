@@ -13,7 +13,13 @@ defmodule Vexil do
 
   @type validate_argv_error() :: {:error, :invalid_argv}
   @type validate_opts_error() ::
-          {:error, :invalid_flag | :invalid_option | :conflicting_key, atom()}
+          {:error,
+           :invalid_flag
+           | :invalid_option
+           | :required_option_has_default
+           | :invalid_parser, atom()}
+          | {:error, :conflicting_key, String.t()}
+          | {:error, :flags_not_keywords | :options_not_keywords}
 
   @type parse_spec_item() ::
           {:flags, flags()}
@@ -50,7 +56,7 @@ defmodule Vexil do
   @ungreedy_parsers [:integer, :float]
 
   @spec parse(argv(), parse_spec()) :: parse_result()
-  def parse(argv, opts \\ []) do
+  def parse(argv, opts \\ []) when is_list(argv) do
     double_dash = Keyword.get(opts, :obey_double_dash, false)
     error_early = Keyword.get(opts, :error_early, false)
     opt_flags = Keyword.get(opts, :flags, [])
@@ -100,55 +106,73 @@ defmodule Vexil do
 
   @spec validate_opts(flags(), options()) :: :ok | validate_opts_error()
   defp validate_opts(flags, options) do
-    {bad_flag, _} =
-      Enum.find(flags, {nil, nil}, fn {_, struct} -> !match?(%Structs.Flag{}, struct) end)
+    # TODO: enforce single character short
 
-    {bad_option, _} =
-      Enum.find(options, {nil, nil}, fn {_, struct} -> !match?(%Structs.Option{}, struct) end)
+    get_conflicts = fn ->
+      flag_names =
+        Enum.map(flags, fn {_, flag} -> {flag.short, flag.long} end)
+        |> Enum.reduce([], fn {short, long}, acc -> [short | [long | acc]] end)
 
-    {required_option_has_default, _} =
-      Enum.find(options, {nil, nil}, fn {_, struct} ->
-        struct.required && struct.default != nil
-      end)
+      option_names =
+        Enum.map(options, fn {_, opt} -> {opt.short, opt.long} end)
+        |> Enum.reduce([], fn {short, long}, acc -> [short | [long | acc]] end)
 
-    {invalid_parser, _} =
-      Enum.find(options, {nil, nil}, fn {_, struct} ->
-        struct.parser not in Parsers.all() and not is_function(struct.parser)
-      end)
-
-    flag_names =
-      Enum.map(flags, fn {_, flag} -> {flag.short, flag.long} end)
-      |> Enum.reduce([], fn {short, long}, acc -> [short | [long | acc]] end)
-
-    option_names =
-      Enum.map(options, fn {_, opt} -> {opt.short, opt.long} end)
-      |> Enum.reduce([], fn {short, long}, acc -> [short | [long | acc]] end)
-
-    conflicts =
       flag_names
       |> Enum.reduce(option_names, fn key, acc -> [key | acc] end)
       |> Enum.frequencies()
       |> Enum.filter(fn {_, v} -> v != 1 end)
       |> Enum.map(fn {k, _} -> k end)
+    end
 
-    cond do
-      bad_flag != nil ->
+    with {:bad_flags, true} <- {:bad_flags, Keyword.keyword?(flags)},
+         {:bad_options, true} <- {:bad_options, Keyword.keyword?(options)},
+         {:invalid_flag, nil} <-
+           {
+             :invalid_flag,
+             Enum.find(flags, fn {_, struct} -> !match?(%Structs.Flag{}, struct) end)
+           },
+         {:invalid_option, nil} <-
+           {
+             :invalid_option,
+             Enum.find(options, fn {_, struct} -> !match?(%Structs.Option{}, struct) end)
+           },
+         {:conflicting_key, []} <- {:conflicting_key, get_conflicts.()},
+         {:required_option_has_default, nil} <-
+           {
+             :required_option_has_default,
+             Enum.find(options, fn {_, struct} ->
+               struct.required && struct.default != nil
+             end)
+           },
+         {:invalid_parser, nil} <-
+           {
+             :invalid_parser,
+             Enum.find(options, fn {_, struct} ->
+               struct.parser not in Parsers.all() and not is_function(struct.parser)
+             end)
+           } do
+      :ok
+    else
+      {:bad_flags, _} ->
+        {:error, :flags_not_keywords}
+
+      {:bad_options, _} ->
+        {:error, :options_not_keywords}
+
+      {:invalid_flag, {bad_flag, _}} ->
         {:error, :invalid_flag, bad_flag}
 
-      bad_option != nil ->
+      {:invalid_option, {bad_option, _}} ->
         {:error, :invalid_option, bad_option}
 
-      conflicts != [] ->
-        {:error, :conflicting_key, List.first(conflicts)}
+      {:conflicting_key, [bad_key | _]} ->
+        {:error, :conflicting_key, bad_key}
 
-      required_option_has_default != nil ->
-        {:error, :required_option_has_default, required_option_has_default}
+      {:required_option_has_default, {bad_option, _}} ->
+        {:error, :required_option_has_default, bad_option}
 
-      invalid_parser != nil ->
-        {:error, :invalid_parser, invalid_parser}
-
-      true ->
-        :ok
+      {:invalid_parser, {bad_option, _}} ->
+        {:error, :invalid_parser, bad_option}
     end
   end
 

@@ -13,10 +13,101 @@ defmodule VexilTest do
                {:ok, %{argv: ["foo", "bar"], flags: %{}, options: %{}}, {[], []}}
     end
 
-    # test "returns an error when there's a bad item given as a flag" do
-    #   # TODO: need to validate that flags and options are keyword lists
-    #   assert Vexil.parse(["foo"], flags: [""]) == []
-    # end
+    test "returns an error when flags aren't a keyword list" do
+      assert Vexil.parse(["foo"], flags: %{}) == {:error, :flags_not_keywords}
+      assert Vexil.parse(["foo"], flags: "") == {:error, :flags_not_keywords}
+      assert Vexil.parse(["foo"], flags: 'foobar') == {:error, :flags_not_keywords}
+      assert Vexil.parse(["foo"], flags: [:foo]) == {:error, :flags_not_keywords}
+    end
+
+    test "returns an error when options aren't a keyword list" do
+      assert Vexil.parse(["foo"], options: %{}) == {:error, :options_not_keywords}
+      assert Vexil.parse(["foo"], options: "") == {:error, :options_not_keywords}
+      assert Vexil.parse(["foo"], options: 'foobar') == {:error, :options_not_keywords}
+      assert Vexil.parse(["foo"], options: [:foo]) == {:error, :options_not_keywords}
+    end
+
+    test "returns an error when there's a bad item given as a flag" do
+      assert Vexil.parse(["foo"], flags: [foo: %{}]) == {:error, :invalid_flag, :foo}
+      assert Vexil.parse(["foo"], flags: [foo: ""]) == {:error, :invalid_flag, :foo}
+      assert Vexil.parse(["foo"], flags: [foo: '']) == {:error, :invalid_flag, :foo}
+      assert Vexil.parse(["foo"], flags: [foo: []]) == {:error, :invalid_flag, :foo}
+    end
+
+    test "returns an error when there's a bad item given as a option" do
+      assert Vexil.parse(["foo"], options: [foo: %{}]) == {:error, :invalid_option, :foo}
+      assert Vexil.parse(["foo"], options: [foo: ""]) == {:error, :invalid_option, :foo}
+      assert Vexil.parse(["foo"], options: [foo: '']) == {:error, :invalid_option, :foo}
+      assert Vexil.parse(["foo"], options: [foo: []]) == {:error, :invalid_option, :foo}
+    end
+
+    test "returns an error when there's conflicting long/short names between flags and options" do
+      flags = [
+        bar: %Structs.Flag{
+          short: "b",
+          long: "bar"
+        },
+        foo: %Structs.Flag{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      options = [
+        baz: %Structs.Option{
+          short: "B",
+          long: "baz"
+        },
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      options2 = [
+        baz: %Structs.Option{
+          short: "B",
+          long: "baz"
+        },
+        foo: %Structs.Option{
+          short: "F",
+          long: "foo"
+        }
+      ]
+
+      assert Vexil.parse(["foo"], flags: flags, options: options) ==
+               {:error, :conflicting_key, "f"}
+
+      assert Vexil.parse(["foo"], flags: flags, options: options2) ==
+               {:error, :conflicting_key, "foo"}
+    end
+
+    test "returns an error when an option is required and has a default" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          required: true,
+          default: "bar"
+        }
+      ]
+
+      assert Vexil.parse(["foo"], options: options) ==
+               {:error, :required_option_has_default, :foo}
+    end
+
+    test "returns an error when an option has a parser that isn't built in nor a function" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          parser: :my_epic_parser
+        }
+      ]
+
+      assert Vexil.parse(["foo"], options: options) ==
+               {:error, :invalid_parser, :foo}
+    end
   end
 
   describe "parse/2 - flags" do
