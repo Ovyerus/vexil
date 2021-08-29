@@ -311,6 +311,33 @@ defmodule VexilTest do
                {:ok, %{argv: [], flags: %{bar: true, foo: 1}, options: %{}}, {[], []}}
     end
 
+    test "flags not provided default to false" do
+      foo = %Structs.Flag{
+        short: "f",
+        long: "foo"
+      }
+
+      bar = %Structs.Flag{
+        short: "b",
+        long: "bar"
+      }
+
+      one = [foo: foo]
+      two = [foo: foo, bar: bar]
+
+      assert Vexil.parse([], flags: one) ==
+               {:ok, %{argv: [], flags: %{foo: false}, options: %{}}, {[], []}}
+
+      assert Vexil.parse([], flags: two) ==
+               {:ok, %{argv: [], flags: %{foo: false, bar: false}, options: %{}}, {[], []}}
+
+      assert Vexil.parse(["-f"], flags: one) ==
+               {:ok, %{argv: [], flags: %{foo: true}, options: %{}}, {[], []}}
+
+      assert Vexil.parse(["-f", "-b"], flags: two) ==
+               {:ok, %{argv: [], flags: %{foo: true, bar: true}, options: %{}}, {[], []}}
+    end
+
     test "has an error in the relevant list when seeing an unknown flag" do
       foo = %Structs.Flag{
         short: "f",
@@ -353,7 +380,6 @@ defmodule VexilTest do
                {:error, :unknown_flag, "b"}
     end
 
-    @tag :only
     test "has an error in the relevant list when seeing a duplicate flag" do
       foo = %Structs.Flag{
         short: "f",
@@ -386,6 +412,30 @@ defmodule VexilTest do
                  %{argv: [], flags: %{foo: 1, bar: true}, options: %{}},
                  {[], [{:error, :duplicate_flag, :bar}]}
                }
+    end
+
+    # TODO: test error early for the above here
+    test "returns only an error when seeing a duplicate flag when told to error early" do
+      foo = %Structs.Flag{
+        short: "f",
+        long: "foo",
+        multiple: true
+      }
+
+      bar = %Structs.Flag{
+        short: "b",
+        long: "bar"
+      }
+
+      one = [bar: bar]
+      two = [foo: foo, bar: bar]
+      result = {:error, :duplicate_flag, :bar}
+
+      assert Vexil.parse(["--bar", "--bar"], flags: one, error_early: true) == result
+      assert Vexil.parse(["-b", "-b"], flags: one, error_early: true) == result
+      assert Vexil.parse(["--bar", "-b"], flags: one, error_early: true) == result
+      assert Vexil.parse(["-bb"], flags: one, error_early: true) == result
+      assert Vexil.parse(["--foo", "--bar", "-b"], flags: two, error_early: true) == result
     end
   end
 
@@ -642,6 +692,164 @@ defmodule VexilTest do
 
       assert Vexil.parse(["-f", "bar", "-b=bar", "-f", "baz", "-b", "baz"], options: options) ==
                result
+    end
+
+    test "has an error in the relevant list when seeing an unknown option" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      result = fn name ->
+        {
+          :error,
+          %{
+            argv: ["bong"],
+            flags: %{},
+            options: %{foo: nil}
+          },
+          {[{:error, :unknown_option, name}], []}
+        }
+      end
+
+      assert Vexil.parse(["--bar", "bong"], options: options) == result.("bar")
+      assert Vexil.parse(["-b", "bong"], options: options) == result.("b")
+      assert Vexil.parse(["--bar=bong"], options: options) == result.("bar")
+      assert Vexil.parse(["-b=bong"], options: options) == result.("b")
+    end
+
+    test "returns only an error when seeing an unknown option when told to error early" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      result = fn name ->
+        {:error, :unknown_option, name}
+      end
+
+      assert Vexil.parse(["--bar", "bong"], options: options, error_early: true) == result.("bar")
+      assert Vexil.parse(["-b", "bong"], options: options, error_early: true) == result.("b")
+      assert Vexil.parse(["--bar=bong"], options: options, error_early: true) == result.("bar")
+      assert Vexil.parse(["-b=bong"], options: options, error_early: true) == result.("b")
+    end
+
+    test "has an error in the relevant list when a required option is missing" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          required: true
+        },
+        bar: %Structs.Option{
+          short: "b",
+          long: "bar",
+          required: true
+        }
+      ]
+
+      result1 = {
+        :ok,
+        %{
+          argv: [],
+          flags: %{},
+          options: %{}
+        },
+        {[{:error, :missing_required_options, [:foo, :bar]}], []}
+      }
+
+      result2 = {
+        :ok,
+        %{
+          argv: [],
+          flags: %{},
+          options: %{foo: "faz"}
+        },
+        {[{:error, :missing_required_options, [:bar]}], []}
+      }
+
+      result3 = {
+        :ok,
+        %{
+          argv: [],
+          flags: %{},
+          options: %{bar: "baz"}
+        },
+        {[{:error, :missing_required_options, [:foo]}], []}
+      }
+
+      assert Vexil.parse([], options: options) == result1
+      assert Vexil.parse(["--foo", "faz"], options: options) == result2
+      assert Vexil.parse(["--bar", "baz"], options: options) == result3
+    end
+
+    test "returns only an error when a required option is missing when told to error early" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          required: true
+        },
+        bar: %Structs.Option{
+          short: "b",
+          long: "bar",
+          required: true
+        }
+      ]
+
+      result1 = {:error, :missing_required_options, [:foo, :bar]}
+      result2 = {:error, :missing_required_options, [:bar]}
+      result3 = {:error, :missing_required_options, [:foo]}
+
+      assert Vexil.parse([], options: options, error_early: true) == result1
+      assert Vexil.parse(["--foo", "faz"], options: options, error_early: true) == result2
+      assert Vexil.parse(["--bar", "baz"], options: options, error_early: true) == result3
+    end
+
+    test "has an error in the relevant list when an invalid value is given to an option with a parser" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          parser: :integer
+        }
+      ]
+
+      result = {
+        :ok,
+        %{
+          argv: [],
+          flags: %{},
+          options: %{foo: nil}
+        },
+        {[{:error, :invalid_value, :foo, "expected integer, got `bong`"}], []}
+      }
+
+      assert Vexil.parse(["--foo", "bong"], options: options) == result
+      assert Vexil.parse(["-f", "bong"], options: options) == result
+      assert Vexil.parse(["--foo=bong"], options: options) == result
+      assert Vexil.parse(["-f=bong"], options: options) == result
+    end
+
+    test "returns only an error when an invalid value is given to an option with a parser when told to error early" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          parser: :integer
+        }
+      ]
+
+      result = {:error, :invalid_value, :foo, "expected integer, got `bong`"}
+
+      assert Vexil.parse(["--foo", "bong"], options: options, error_early: true) == result
+      assert Vexil.parse(["-f", "bong"], options: options, error_early: true) == result
+      assert Vexil.parse(["--foo=bong"], options: options, error_early: true) == result
+      assert Vexil.parse(["-f=bong"], options: options, error_early: true) == result
     end
   end
 

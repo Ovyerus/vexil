@@ -40,7 +40,6 @@ defmodule Vexil do
           | {:error, :duplicate_option, atom()}
           | {:error, :invalid_value, atom(), String.t()}
           | {:error, :missing_required_options, list(atom())}
-          | {:error, :unknown_parser, atom()}
   @type parsed_options() :: %{atom() => any()}
   @type find_options_result() ::
           {:ok, parsed_options(), list(find_options_error()), argv()} | find_options_error()
@@ -472,18 +471,7 @@ defmodule Vexil do
           seen_flags
           |> Enum.filter(&match?({:ok, _, _}, &1))
           # Get amount of times each name occurs (used for multiple flags like verbosity)
-          # Doing this manually instead of Enum.frequencies so that we maintain the order,
-          # as Enum.frequencies puts it into a map which is sorted alphabeticallyQ
-          |> Enum.reduce([], fn {_, key, _}, acc ->
-            Keyword.put(
-              acc,
-              key,
-              case acc[key] do
-                nil -> 1
-                i -> i + 1
-              end
-            )
-          end)
+          |> Enum.frequencies_by(&elem(&1, 1))
           |> Enum.map(fn
             {name, count} ->
               if wanted_flags[name].multiple,
