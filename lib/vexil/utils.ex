@@ -62,12 +62,12 @@ defmodule Vexil.Utils do
         raise Errors.InvalidValueError,
           key: key,
           value: value,
-          message: "invalid value '#{value}' for option '#{key}'"
+          message: "invalid value for option '#{key}'"
 
       {:error, :missing_required_options, keys} ->
         raise Errors.RequiredOptionError,
           keys: keys,
-          message: "missing required options '#{keys}'"
+          message: "missing required options '#{inspect(keys)}'"
 
       {:error, :unknown_flag, key} ->
         raise Errors.UnknownFlagError, key: key, message: "unknown flag '#{key}'"

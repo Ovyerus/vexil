@@ -67,7 +67,7 @@ defmodule Vexil do
          {:ok, options, option_errors, argv} <-
            find_options(argv, opt_options, opt_flags, error_early),
          {:ok, flags, flag_errors, argv} <-
-           find_flags(argv, opt_flags, opt_options, error_early) do
+           find_flags(argv, opt_flags, opt_options, option_errors, error_early) do
       {
         :ok,
         %{flags: flags, options: options, argv: argv ++ argv_remainder},
@@ -236,7 +236,11 @@ defmodule Vexil do
                 [fixed_name | remainder]
               )
 
-        not option.multiple && seen_options[name] ->
+        not option.multiple &&
+            Enum.find(seen_options, fn
+              {:ok, opt_name, _} -> opt_name == name
+              _ -> false
+            end) ->
           err = {:error, :duplicate_option, name}
 
           if error_early,
@@ -380,11 +384,13 @@ defmodule Vexil do
     end
   end
 
-  @spec find_flags(argv(), flags(), options(), boolean(), found(), argv()) :: find_flags_result()
+  @spec find_flags(argv(), flags(), options(), find_options_error(), boolean(), found(), argv()) ::
+          find_flags_result()
   defp find_flags(
          argv,
          wanted_flags,
          wanted_options,
+         option_errors,
          error_early,
          seen_flags \\ [],
          remainder \\ []
@@ -420,10 +426,17 @@ defmodule Vexil do
 
               {[value | result_acc], name_acc}
 
-            !flag ->
+            !flag &&
+                !Enum.find(option_errors, fn
+                  {:error, :unknown_option, bad_name} -> bad_name == lookup_name
+                  _ -> false
+                end) ->
               value = {:error, :unknown_flag, lookup_name}
 
               {[value | result_acc], name_acc}
+
+            !flag ->
+              {result_acc, name_acc}
 
             # TODO: there's probably a more elegant solution to this
             not flag.multiple &&
@@ -459,6 +472,7 @@ defmodule Vexil do
             tail,
             wanted_flags,
             wanted_options,
+            option_errors,
             error_early,
             results_no_remainders ++ seen_flags,
             remainders ++ remainder
@@ -501,7 +515,9 @@ defmodule Vexil do
         consume_flag.(flags, tail, :short)
 
       [head | tail] ->
-        find_flags(tail, wanted_flags, wanted_options, error_early, seen_flags, [head | remainder])
+        find_flags(tail, wanted_flags, wanted_options, option_errors, error_early, seen_flags, [
+          head | remainder
+        ])
     end
   end
 end

@@ -1,7 +1,7 @@
 defmodule VexilTest do
   @moduledoc false
 
-  alias Vexil.Structs
+  alias Vexil.{Errors, Structs}
   use ExUnit.Case, async: true
   doctest Vexil
 
@@ -704,7 +704,7 @@ defmodule VexilTest do
 
       result = fn name ->
         {
-          :error,
+          :ok,
           %{
             argv: ["bong"],
             flags: %{},
@@ -850,6 +850,243 @@ defmodule VexilTest do
       assert Vexil.parse(["-f", "bong"], options: options, error_early: true) == result
       assert Vexil.parse(["--foo=bong"], options: options, error_early: true) == result
       assert Vexil.parse(["-f=bong"], options: options, error_early: true) == result
+    end
+
+    test "has an error in the relevant list when seeing a duplicate option not specified as multiple" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      result = {
+        :ok,
+        %{
+          argv: ["bong"],
+          flags: %{},
+          options: %{foo: "bong"}
+        },
+        {[{:error, :duplicate_option, :foo}], []}
+      }
+
+      assert Vexil.parse(["--foo", "bong", "--foo", "bong"], options: options) == result
+      assert Vexil.parse(["-f", "bong", "-f", "bong"], options: options) == result
+      assert Vexil.parse(["--foo=bong", "--foo=bong"], options: options) == result
+      assert Vexil.parse(["-f=bong", "-f=bong"], options: options) == result
+    end
+
+    test "returns only an error when seeing a duplicate option not specified as multiple when told to error early" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      result = {:error, :duplicate_option, :foo}
+
+      assert Vexil.parse(["--foo", "bong", "--foo", "bong"], options: options, error_early: true) ==
+               result
+
+      assert Vexil.parse(["-f", "bong", "-f", "bong"], options: options, error_early: true) ==
+               result
+
+      assert Vexil.parse(["--foo=bong", "--foo=bong"], options: options, error_early: true) ==
+               result
+
+      assert Vexil.parse(["-f=bong", "-f=bong"], options: options, error_early: true) == result
+    end
+  end
+
+  describe "parse!/2" do
+    test "returns the result of parse" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      flags = [
+        bar: %Structs.Flag{
+          short: "b",
+          long: "bar"
+        }
+      ]
+
+      result1 = %{argv: [], flags: %{}, options: %{foo: "faz"}}
+      result2 = %{argv: [], flags: %{bar: true}, options: %{}}
+
+      assert Vexil.parse!(["--foo", "faz"], options: options) == result1
+      assert Vexil.parse!(["-f", "faz"], options: options) == result1
+
+      assert Vexil.parse!(["--bar"], flags: flags) == result2
+      assert Vexil.parse!(["-b"], flags: flags) == result2
+    end
+
+    test "raises an error for an invalid argv" do
+      assert_raise Errors.ArgvError, fn ->
+        Vexil.parse!([1])
+      end
+    end
+
+    test "raises an error when flags is not a keyword list" do
+      assert_raise ArgumentError, "flags must be a keyword list", fn ->
+        Vexil.parse!([], flags: "")
+      end
+    end
+
+    test "raises an error when options is not a keyword list" do
+      assert_raise ArgumentError, "options must be a keyword list", fn ->
+        Vexil.parse!([], options: "")
+      end
+    end
+
+    test "raises an error when an option is not the correct struct" do
+      options = [
+        foo: ""
+      ]
+
+      assert_raise Errors.InvalidOptionError,
+                   "invalid option given 'foo', must be `Vexil.Structs.Option`",
+                   fn ->
+                     Vexil.parse!([], options: options)
+                   end
+    end
+
+    test "raises an error when a flag is not the correct struct" do
+      flags = [
+        foo: ""
+      ]
+
+      assert_raise Errors.InvalidFlagError,
+                   "invalid flag given 'foo', must be `Vexil.Structs.Flag`",
+                   fn ->
+                     Vexil.parse!([], flags: flags)
+                   end
+    end
+
+    test "raises an error when a required option has a default" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          default: "faz",
+          required: true
+        }
+      ]
+
+      assert_raise Errors.RequiredOptionHasDefaultError,
+                   "required option 'foo' has a default value",
+                   fn ->
+                     Vexil.parse!([], options: options)
+                   end
+    end
+
+    test "raies an error when theres a conflicting short or long key between flags and options" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      flags = [
+        foo: %Structs.Flag{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      # TODO: make this prefer long keys before short keys?
+      assert_raise Errors.ConflictingKeyError,
+                   "conflicting key 'f' given between flags and options",
+                   fn ->
+                     Vexil.parse!([], options: options, flags: flags)
+                   end
+    end
+
+    test "raises an exception when an invalid parser is given for an option" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          parser: :my_epic_parser
+        }
+      ]
+
+      assert_raise Errors.InvalidParserError,
+                   "invalid parser for option 'foo', must be :string, :integer, :float, or a unary function",
+                   fn ->
+                     Vexil.parse!([], options: options)
+                   end
+    end
+
+    test "raises an error when given an unknown flag" do
+      assert_raise Errors.UnknownFlagError, "unknown flag 'f'", fn ->
+        Vexil.parse!(["-fb"], flags: [])
+      end
+    end
+
+    test "raises an error when given an unknown option" do
+      assert_raise Errors.UnknownOptionError, "unknown option 'foo'", fn ->
+        Vexil.parse!(["--foo"], options: [])
+      end
+    end
+
+    test "raises an error when given a duplicate flag" do
+      flags = [
+        foo: %Structs.Flag{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      assert_raise Errors.DuplicateFlagError, "duplicate flag 'foo'", fn ->
+        Vexil.parse!(["--foo", "--foo"], flags: flags)
+      end
+    end
+
+    test "raises an error when given a duplicate option" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo"
+        }
+      ]
+
+      assert_raise Errors.DuplicateOptionError, "duplicate option 'foo'", fn ->
+        Vexil.parse!(["--foo", "bar", "--foo", "bar"], options: options)
+      end
+    end
+
+    test "raises an error when missing a required option" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          required: true
+        }
+      ]
+
+      assert_raise Errors.RequiredOptionError, fn ->
+        Vexil.parse!([], options: options)
+      end
+    end
+
+    assert "raises an error when an invalid value is given to an option with a parser" do
+      options = [
+        foo: %Structs.Option{
+          short: "f",
+          long: "foo",
+          parser: :integer
+        }
+      ]
+
+      assert_raise Errors.InvalidValueError, "invalid value for option 'foo'", fn ->
+        Vexil.parse!(["--foo", "bong"], options: options)
+      end
     end
   end
 
