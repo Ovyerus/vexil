@@ -1,6 +1,6 @@
 # Vexil
 
-> Elxir flag parser that does _just_ enough.
+> An Elixir flag parser that does _just_ enough.
 
 Vexil is a CLI flag parsing library for Elixir, intended to be used in places
 where you might want to parse user input akin to how command line arguments are
@@ -42,28 +42,34 @@ end
 ```elixir
 iex> argv = "--end-at 256 -vvv some stuff after" |> OptionParser.split()
 ["--end-at", "256", "-vvv", "some", "stuff", "after"]
-iex> {:ok, values, {option_errors, flag_errors}} = Vexil.parse(argv,
-...> options: [
-...>   end_at: %Vexil.Structs.Option{
-...>     short: "e",
-...>     long: "end-at",
-...>     parser: :integer, # Default `:string`
-...>     required: true
-...>   }
-...> ],
-...> flags: [
-...>   verbose: %Vexil.Structs.Flag{
-...>     short: "v",
-...>     long: "verbose",
-...>     multiple: true
-...>   }
-...> ])
+iex> options = [
+...>   options: [
+...>     end_at: %Vexil.Structs.Option{
+...>       short: "e",
+...>       long: "end-at",
+...>       parser: :integer, # Default `:string`
+...>       required: true
+...>     }
+...>   ],
+...>   flags: [
+...>     verbose: %Vexil.Structs.Flag{
+...>       short: "v",
+...>       long: "verbose",
+...>       multiple: true
+...>     }
+...>   ]
+...> ]
+iex> {:ok, values, {option_errors, flag_errors}} = Vexil.parse(argv, options)
 {:ok,
  %{
    argv: ["some", "stuff", "after"],
    flags: %{verbose: 3},
    options: %{end_at: 256}
  }, {[], []}}
+iex> argv2 = "-vvv some stuff after" |> OptionParser.split()
+iex> {:ok, values, {option_errors, flag_errors}} = Vexil.parse(argv2, options)
+{:ok, %{argv: ["some", "stuff", "after"], flags: %{verbose: 3}, options: %{}},
+ {[{:error, :missing_required_options, [:end_at]}], []}}
 ```
 
 This section will be updated as documentation is expanded.
