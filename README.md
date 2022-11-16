@@ -33,7 +33,7 @@ Add `vexil` to your dependencies in `mix.exs`.
 
 ```elixir
 def deps do
-  [{:optimus, "~> 0.2"}]
+  [{:vexil, "~> 0.1"}]
 end
 ```
 
